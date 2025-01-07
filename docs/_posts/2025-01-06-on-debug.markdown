@@ -1,0 +1,83 @@
+---
+layout: post
+title:  "On Debug"
+date:   2025-01-06 18:50:52 -0500
+category: blog
+tags: chip design debug
+---
+
+In my very first "real" job after graduate school, a few of us who had joined recently were given an overview of the chip we were supposed to work on. In that overview session, the principal architect of the chip said, "No matter what area you are working on, 85% of your time will be spent on debugging something that isn't quite working the way it was intended. So get good at debugging to root cause." 
+
+Over two decades later, I still remember his words and it still holds true. Over the years I have held a variety of roles: individual contributor, tech lead, team manager, etc. I have also worked across different domains: RTL design, verification, performance analysis, silicon debug, SoC architecture, and even briefly worked on system software. The problems have been different, but I have fundamentally approached it with the same debug process.
+
+1. What is the intended behavior?  
+1. How different is the actual behavior from intended behavior? Is it reproducible?  
+1. Where could the problem be occuring? Could be multiple hypotheses  
+1. What debug tools do we have? What can we do to get better visibility?  
+1. Can we devise experiments to narrow it down? Can we make it fail faster?  
+1. What did the experiment results reveal? Can we rule out certain hypotheses? Do we have new hypotheses?  
+1. Did we get to root cause? Can we create a quick fix or workaround to confirm the root cause is correct?  
+
+After confirming root cause and getting a fix put in, the process isn't over. Additional steps:
+* Are there "cousin" bugs in related areas or places where similar design method could have been used?
+* What assertion or error flag could we raise to catch this class of problems and reduce time to root cause?
+
+	
+### Example 1: Toaster ###
+
+The first example is what I have even used with middle school kids. The failure is very simple to describe: I put a couple of slices of bread in a toaster and push the lever down to turn it on. But I don't get toasted bread! What has gone wrong?
+
+We can walk through the process above for even a relatively simple issue as this.
+
+1. Intended behavior: I put the bread in the toaster, set the toast level, turn it on, and sometime later the toaster pops with toasted bread.
+1. Actual behavior: The lever doesn't stay down and bread pops up immediately. Bread isn't toasted at all.
+1. Hypotheses on possible issues:
+   * Issues with input:
+      * Power cord not plugged
+	  * No power at the outlet
+   * Issues internal to the toaster
+      * Problem with the wiring
+	  * Issue with the actual heating element
+	  * Mechanical issue with the lever (doesn't stay latched down)
+	  * Issue with the controls
+1. Tools: 
+   * Eyes (visual inspection)
+   * Multimeter or continuity tester (handy!)
+   * Screwdriver to open up the unit and look inside
+1. Experiments to narrow down the issue?
+   1. External checks
+      - Is the toaster plugged in? Is the power cord in good condition?
+	  - Is the outlet getting power? Check with multimeter or by plugging some other known good appliance (like a desk lamp)
+	  - If no power at the outlet, did the breaker trip? Check the breaker panel 
+	  - Is there power in the kitchen or rest of the house? Did the whole neighborhood lose power?
+   2. Assuming there is power at the outlet, we can look at possible internal issues
+      - Is the power cord connected properly inside? A continuity tester to check continuity between the power cord and the controller board would be very handy
+	  - Does the connection to the heating element look okay? 
+	  - Is the latch holding the lever broken?
+	  - Is the knob setting the toast level somehow physically disconnected? Heat could have caused solder to become weak
+1. Results from the experiments: In this case, the system is rather simple, so we could logically list almost all known failure causes. One of the observations above is likely to reveal the real cause of the toaster malfunction.
+1. Let's say the issue was with the lever not staying down (actually happened to my toaster). If we hold it down such that it maintains contact, do the coils light up? If yes, we have confirmed the root cause. We can then look into a fix. The workaround is to just hold the lever down, but this isn't very convenient.
+
+In my toaster, there was an electromagnetic mechanism holding the lever down in place. This magnetic plate was covered in some gunk and it was preventing the magnet from getting energized. I simply cleaned off that area and the latch would stay down. It was an inexpensive toaster and I could have easily got a new one, but a little time on debug helped restore the device to working order. 
+
+
+### Example 2: CPU Read Transaction ###
+
+This is a question I frequently ask when I interview candidates, both junior and experienced. If this blog becomes popular, I need to find a new question!
+
+You are a DV engineer responsible for chip-level verification of a CPU. Your chip consists of a CPU core, an interconnect of some kind, and a memory controller. In your testbench, you have the fullchip instantiated, along with models of all the external interfaces (e.g. DRAM memory model, I/O bus model, clock/resets, etc.). You have a test running assembly instructions on the CPU: the code writes a known value to a memory address and then reads it back to make sure the interface to memory is working correctly:
+```
+mov 0xBADDECAF -> r1   ; initialize register r1 with known value
+mov 0xFA7CA7 -> r2     ; initialize r2 with address
+mov r1 -> [r2]         ; write value in r1 to memory address r2
+
+mov [r2] -> r3         ; read value from address r2 into register r3
+cmp r1, r3             ; compare known value in r1 to value read from memory in r3 (result implicity stored in condition code register)
+jne FAILURE            ; end test with failure if condition code shows not equal, i.e. r1 != r3
+```
+
+You run this test and see that the code has gone to FAILURE. How would you debug this?
+
+I have asked this question to multiple candidates, and ask them to walk through the debug process. I tell them to ask clarifying questions -- I have a particular failure in mind, and I answer their questions consistent with that failure mode. The goal isn't to see if the candidate can find the bug, but to see *HOW* they reason through the debug process. Obviously, my expectation is a lot different for someone with several years of experience vs. someone fresh out of college.
+
+How would you answer this?
